@@ -33,7 +33,7 @@ int main() {
 
 	in.read(ioRaw, buflen);
 	int samples = in.gcount();
-	cerr << samples << endl;
+	cerr << "Octets read: " << samples << endl;
 
 	for (int i = 0; i < (samples >> 2); i++) {
 		char ll, lh, rl, rh;

@@ -26,16 +26,16 @@ static const int taps = 1 << depth;
 __global__ void convolKernel(short int* y, const short int u[], const long long k[], const int repeat) {
 	int j = threadIdx.x;
 	long long aa[blocksize];
-	__shared__ long long kk[taps];
+//	__shared__ long long kk[taps];
 
-	memcpy(kk, k, taps * sizeof(kk[0]));
+//	memcpy(kk, k, taps * sizeof(kk[0]));
 	
 	for (int ii = 0; ii < repeat; ii++) {
 		aa[j] = 0;
 #pragma unroll taps
 		for (int i = 0; i < taps; i++) {
 			aa[j] += (0 //
-				+ u[ii * blocksize + j + i + 0] * kk[i + 0] //
+				+ u[ii * blocksize + j + i + 0] * k[i + 0] //
 				);
 		}
 
@@ -135,6 +135,17 @@ cudaError_t addWithCuda() // short int* c, const short int* a, const short int* 
 					cudaGetErrorString(cudaStatus));
 				goto Error;
 			}
+			
+			// cudaDeviceSynchronize waits for the kernel to finish, and returns
+		// any errors encountered during the launch.
+			cudaStatus = cudaDeviceSynchronize();
+			if (cudaStatus != cudaSuccess) {
+				fprintf(stderr,
+					"cudaDeviceSynchronize returned error code %d after launching addKernel!\n",
+					cudaStatus);
+				goto Error;
+			}
+			
 			convolKernel << < 1, blocksize >> > (&dev_y[1][0], &dev_u[1][0], dev_k, 12100);
 			// Check for any errors launching the kernel
 			cudaStatus = cudaGetLastError();
