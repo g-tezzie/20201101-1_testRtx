@@ -1,3 +1,13 @@
+/*
+* 
+* from: https://docs.nvidia.com/nsight-compute/ReleaseNotes/index.html
+* 
+ *Enabling certain metrics can cause GPU kernels to run longer than the driver's watchdog time-out limit. In these cases the driver will terminate the GPU kernel resulting in an application error and profiling data will not be available. Please disable the driver watchdog time out before profiling such long running CUDA kernels.
+On Linux, setting the X Config option Interactive to false is recommended.
+For Windows, detailed information on disabling the Windows TDR is available at https://docs.microsoft.com/en-us/windows-hardware/drivers/display/timeout-detection-and-recovery
+ */
+
+
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 
