@@ -12,7 +12,10 @@
 #include <cmath>
 
 class Fir {
-	static const int depth = 12;
+public:
+	static const int depth = 14;
+
+private:
 	static const int taps = (1 << depth);
 	static const int mask = (1 << depth) - 1;
 	long long x[1 << depth];

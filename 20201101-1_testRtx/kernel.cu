@@ -19,20 +19,22 @@ __global__ void addKernel(short int* c, const short int* a,
 	c[i] = a[i] + b[i];
 }
 
-static const int depth = 12;
+const int blocksize = 1024; 
+static const int depth = Fir::depth;
 __global__ void convolKernel(short int* y, long long* a, const short int u[],
 	const long long k[]) {
 	int j = threadIdx.x;
+	long long aa[blocksize];
 
-	a[j] = 0;
+	aa[j] = 0;
 #pragma unroll
 	for (int i = 0; i < 1 << depth; i++) {
-		a[j] += (0 //
+		aa[j] += (0 //
 			+ u[j + i + 0] * k[i + 0] //
 			);
 	}
 
-	y[j] = a[j] >> 64 - 16;
+	y[j] = aa[j] >> 64 - 16;
 }
 
 // Helper function for using CUDA to add vectors in parallel.
@@ -42,10 +44,10 @@ cudaError_t addWithCuda() // short int* c, const short int* a, const short int* 
 	int size_uy = 25e6;
 	int size_ak = 1 << depth;
 
-	short int* dev_u = 0;
+	short int* dev_u[2];
 	long long* dev_k = 0;
 	long long* dev_a = 0;
-	short int* dev_y = 0;
+	short int* dev_y[2];
 	cudaError_t cudaStatus;
 
 	// Choose which GPU to run on, change this on a multi-GPU system.
@@ -57,13 +59,25 @@ cudaError_t addWithCuda() // short int* c, const short int* a, const short int* 
 	}
 
 	// Allocate GPU buffers for three vectors (two input, one output)    .
-	cudaStatus = cudaMalloc((void**)&dev_y, size_uy * sizeof(dev_y[0]));
+	cudaStatus = cudaMalloc((void**)&dev_y[0], size_uy * sizeof(dev_y[0][0]));
 	if (cudaStatus != cudaSuccess) {
 		fprintf(stderr, "cudaMalloc failed!");
 		goto Error;
 	}
 
-	cudaStatus = cudaMalloc((void**)&dev_u, size_uy * sizeof(dev_u[0]));
+	cudaStatus = cudaMalloc((void**)&dev_y[1], size_uy * sizeof(dev_y[1][0]));
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "cudaMalloc failed!");
+		goto Error;
+	}
+
+	cudaStatus = cudaMalloc((void**)&dev_u[0], size_uy * sizeof(dev_u[0][0]));
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "cudaMalloc failed!");
+		goto Error;
+	}
+
+	cudaStatus = cudaMalloc((void**)&dev_u[1], size_uy * sizeof(dev_u[0][0]));
 	if (cudaStatus != cudaSuccess) {
 		fprintf(stderr, "cudaMalloc failed!");
 		goto Error;
@@ -82,7 +96,14 @@ cudaError_t addWithCuda() // short int* c, const short int* a, const short int* 
 	}
 
 	// Copy input vectors from host memory to GPU buffers.
-	cudaStatus = cudaMemcpy(dev_u, raw[0], size_uy * sizeof(dev_u[0]),
+	cudaStatus = cudaMemcpy(dev_u[0], raw[0], size_uy * sizeof(dev_u[0][0]),
+		cudaMemcpyHostToDevice);
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "cudaMemcpy failed!");
+		goto Error;
+	}
+
+	cudaStatus = cudaMemcpy(dev_u[1], raw[1], size_uy * sizeof(dev_u[1][0]),
 		cudaMemcpyHostToDevice);
 	if (cudaStatus != cudaSuccess) {
 		fprintf(stderr, "cudaMemcpy failed!");
@@ -98,17 +119,25 @@ cudaError_t addWithCuda() // short int* c, const short int* a, const short int* 
 
 	{	// Launch a kernel on the GPU with one thread for each element.
 	//addKernel << < 1, size >> > (dev_c, dev_a, dev_b);
-		const int blocksize = 1024;
+		
 		for (int i = 0; i < 12100; i++) {
-			convolKernel << < 1, blocksize >> > (&dev_y[blocksize * i], dev_a, &dev_u[blocksize * i], dev_k);
+			convolKernel << < 1, blocksize >> > (&dev_y[0][blocksize * i], dev_a, &dev_u[0][blocksize * i], dev_k);
+			// Check for any errors launching the kernel
+			cudaStatus = cudaGetLastError();
+			if (cudaStatus != cudaSuccess) {
+				fprintf(stderr, "addKernel launch failed: %s\n",
+					cudaGetErrorString(cudaStatus));
+				goto Error;
+			}
+			convolKernel << < 1, blocksize >> > (&dev_y[1][blocksize * i], dev_a, &dev_u[1][blocksize * i], dev_k);
+			// Check for any errors launching the kernel
+			cudaStatus = cudaGetLastError();
+			if (cudaStatus != cudaSuccess) {
+				fprintf(stderr, "addKernel launch failed: %s\n",
+					cudaGetErrorString(cudaStatus));
+				goto Error;
+			}
 		}
-	}
-	// Check for any errors launching the kernel
-	cudaStatus = cudaGetLastError();
-	if (cudaStatus != cudaSuccess) {
-		fprintf(stderr, "addKernel launch failed: %s\n",
-			cudaGetErrorString(cudaStatus));
-		goto Error;
 	}
 
 	// cudaDeviceSynchronize waits for the kernel to finish, and returns
@@ -122,7 +151,13 @@ cudaError_t addWithCuda() // short int* c, const short int* a, const short int* 
 	}
 
 	// Copy output vector from GPU buffer to host memory.
-	cudaStatus = cudaMemcpy(rawo[0], dev_y, size_uy * sizeof(rawo[0][0]),
+	cudaStatus = cudaMemcpy(rawo[0], dev_y[0], size_uy * sizeof(rawo[0][0]),
+		cudaMemcpyDeviceToHost);
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "cudaMemcpy failed!");
+		goto Error;
+	}
+	cudaStatus = cudaMemcpy(rawo[1], dev_y[1], size_uy * sizeof(rawo[1][0]),
 		cudaMemcpyDeviceToHost);
 	if (cudaStatus != cudaSuccess) {
 		fprintf(stderr, "cudaMemcpy failed!");
