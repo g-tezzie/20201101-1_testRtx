@@ -62,6 +62,11 @@
       <TargetMachinePlatform>64</TargetMachinePlatform>
       <Keep>true</Keep>
       <Optimization>O3</Optimization>
+      <InterleaveSourceInPTX>true</InterleaveSourceInPTX>
+      <CodeGeneration>compute_75,sm_75</CodeGeneration>
+      <GPUDebugInfo>false</GPUDebugInfo>
+      <PtxAsOptionV>true</PtxAsOptionV>
+      <FastMath>true</FastMath>
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
