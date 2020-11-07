@@ -20,6 +20,9 @@ char oRaw[buflen];
 short int raw[2][buflen / 4];
 short int rawo[2][buflen / 4];
 
+Fir lFir = Fir();
+Fir rFir = Fir();
+
 int main() {
 	time_t start = time(nullptr);
 
@@ -61,8 +64,6 @@ int main() {
 	}
 
 	{
-		Fir lFir = Fir();
-		Fir rFir = Fir();
 
 #pragma loop(hint_parallel(0))
 #pragma loop(ivdep) // ivdep will force this through.

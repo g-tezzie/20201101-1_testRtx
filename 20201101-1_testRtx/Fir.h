@@ -16,7 +16,6 @@ class Fir {
 	static const int taps = (1 << depth);
 	static const int mask = (1 << depth) - 1;
 	long long x[1 << depth];
-	long long k[1 << depth];
 	int ptr = 0;
 
 	void triangular();
@@ -24,6 +23,7 @@ class Fir {
 	void clear();
 
 public:
+	long long k[1 << depth];
 	Fir() {
 		clear();
 		sinc();
