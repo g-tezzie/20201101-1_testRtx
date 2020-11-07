@@ -5,54 +5,25 @@
 #include <stdio.h>
 #include <iostream>
 
+// shmem
+static const int buflen = 100e6;
+extern char ioRaw[buflen];
+extern short int raw[2][buflen / 4];
+extern short int rawo[2][buflen / 4];
 
-cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size);
 
-__global__ void addKernel(int *c, const int *a, const int *b)
+__global__ void addKernel(short int* c, const short int* a, const short int* b)
 {
     int i = threadIdx.x;
     c[i] = a[i] + b[i];
 }
 
-
-int maine()
-{
-    const int arraySize = 5;
-    const int a[arraySize] = { 1, 2, 3, 4, 5 };
-    const int b[arraySize] = { 10, 20, 30, 40, 50 };
-    int c[arraySize] = { 0 };
-
-    // Add vectors in parallel.
-    cudaError_t cudaStatus = addWithCuda(c, a, b, arraySize);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "addWithCuda failed!");
-        return 1;
-    }
-
-    printf("{1,2,3,4,5} + {10,20,30,40,50} = {%d,%d,%d,%d,%d}\n",
-        c[0], c[1], c[2], c[3], c[4]);
-    
-	// NOTE: C-K C-F for "Format Selection"
-	std::cout << c[0] << c[1] << c[2] << c[3] << c[4] << std::endl;
-
-    // cudaDeviceReset must be called before exiting in order for profiling and
-    // tracing tools such as Nsight and Visual Profiler to show complete traces.
-    cudaStatus = cudaDeviceReset();
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaDeviceReset failed!");
-        return 1;
-    }
-
-
-    return 0;
-}
-
 // Helper function for using CUDA to add vectors in parallel.
-cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size)
+cudaError_t addWithCuda(short int* c, const short int* a, const short int* b, unsigned int size)
 {
-    int *dev_a = 0;
-    int *dev_b = 0;
-    int *dev_c = 0;
+    short int* dev_a = 0;
+    short int* dev_b = 0;
+    short int* dev_c = 0;
     cudaError_t cudaStatus;
 
     // Choose which GPU to run on, change this on a multi-GPU system.
@@ -63,39 +34,39 @@ cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size)
     }
 
     // Allocate GPU buffers for three vectors (two input, one output)    .
-    cudaStatus = cudaMalloc((void**)&dev_c, size * sizeof(int));
+    cudaStatus = cudaMalloc((void**)&dev_c, size * sizeof(dev_c[0]));
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMalloc failed!");
         goto Error;
     }
 
-    cudaStatus = cudaMalloc((void**)&dev_a, size * sizeof(int));
+    cudaStatus = cudaMalloc((void**)&dev_a, size * sizeof(dev_a[0]));
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMalloc failed!");
         goto Error;
     }
 
-    cudaStatus = cudaMalloc((void**)&dev_b, size * sizeof(int));
+    cudaStatus = cudaMalloc((void**)&dev_b, size * sizeof(dev_b[0]));
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMalloc failed!");
         goto Error;
     }
 
     // Copy input vectors from host memory to GPU buffers.
-    cudaStatus = cudaMemcpy(dev_a, a, size * sizeof(int), cudaMemcpyHostToDevice);
+    cudaStatus = cudaMemcpy(dev_a, a, size * sizeof(dev_a[0]), cudaMemcpyHostToDevice);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMemcpy failed!");
         goto Error;
     }
 
-    cudaStatus = cudaMemcpy(dev_b, b, size * sizeof(int), cudaMemcpyHostToDevice);
+    cudaStatus = cudaMemcpy(dev_b, b, size * sizeof(dev_b[0]), cudaMemcpyHostToDevice);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMemcpy failed!");
         goto Error;
     }
 
     // Launch a kernel on the GPU with one thread for each element.
-    addKernel<<<1, size>>>(dev_c, dev_a, dev_b);
+    addKernel <<< 1, size >>> (dev_c, dev_a, dev_b);
 
     // Check for any errors launching the kernel
     cudaStatus = cudaGetLastError();
@@ -103,7 +74,7 @@ cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size)
         fprintf(stderr, "addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
         goto Error;
     }
-    
+
     // cudaDeviceSynchronize waits for the kernel to finish, and returns
     // any errors encountered during the launch.
     cudaStatus = cudaDeviceSynchronize();
@@ -113,7 +84,7 @@ cudaError_t addWithCuda(int *c, const int *a, const int *b, unsigned int size)
     }
 
     // Copy output vector from GPU buffer to host memory.
-    cudaStatus = cudaMemcpy(c, dev_c, size * sizeof(int), cudaMemcpyDeviceToHost);
+    cudaStatus = cudaMemcpy(c, dev_c, size * sizeof(c[0]), cudaMemcpyDeviceToHost);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMemcpy failed!");
         goto Error;
@@ -123,6 +94,35 @@ Error:
     cudaFree(dev_c);
     cudaFree(dev_a);
     cudaFree(dev_b);
-    
+
     return cudaStatus;
 }
+
+
+
+int maine()
+{
+    const int blocksize = 1000;
+	for (int i = 0; i < 1000; i++) {
+        int ptr = i * blocksize;
+		// Add vectors in parallel.
+		cudaError_t cudaStatus = addWithCuda(&rawo[0][ptr], &raw[0][ptr], &raw[1][ptr], blocksize);
+		if (cudaStatus != cudaSuccess) {
+			fprintf(stderr, "addWithCuda failed!");
+			return 1;
+		}
+	}
+	// NOTE: C-K C-F for "Format Selection"
+
+    // cudaDeviceReset must be called before exiting in order for profiling and
+    // tracing tools such as Nsight and Visual Profiler to show complete traces.
+    cudaError_t cudaStatus = cudaDeviceReset();
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaDeviceReset failed!");
+        return 1;
+    }
+
+
+    return 0;
+}
+
