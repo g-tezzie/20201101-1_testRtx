@@ -19,22 +19,28 @@ __global__ void addKernel(short int* c, const short int* a,
 	c[i] = a[i] + b[i];
 }
 
-const int blocksize = 1024; 
+const int blocksize = 1024;
 static const int depth = Fir::depth;
-__global__ void convolKernel(short int* y, long long* a, const short int u[],
-	const long long k[]) {
+static const int taps = 1 << depth;
+
+__global__ void convolKernel(short int* y, const short int u[], const long long k[], const int repeat) {
 	int j = threadIdx.x;
 	long long aa[blocksize];
+	__shared__ long long kk[taps];
 
-	aa[j] = 0;
-#pragma unroll
-	for (int i = 0; i < 1 << depth; i++) {
-		aa[j] += (0 //
-			+ u[j + i + 0] * k[i + 0] //
-			);
+	memcpy(kk, k, taps * sizeof(kk[0]));
+	
+	for (int ii = 0; ii < repeat; ii++) {
+		aa[j] = 0;
+#pragma unroll taps
+		for (int i = 0; i < taps; i++) {
+			aa[j] += (0 //
+				+ u[ii * blocksize + j + i + 0] * kk[i + 0] //
+				);
+		}
+
+		y[ii * blocksize + j] = aa[j] >> 64 - 16;
 	}
-
-	y[j] = aa[j] >> 64 - 16;
 }
 
 // Helper function for using CUDA to add vectors in parallel.
@@ -117,11 +123,11 @@ cudaError_t addWithCuda() // short int* c, const short int* a, const short int* 
 		goto Error;
 	}
 
+
 	{	// Launch a kernel on the GPU with one thread for each element.
 	//addKernel << < 1, size >> > (dev_c, dev_a, dev_b);
-		
-		for (int i = 0; i < 12100; i++) {
-			convolKernel << < 1, blocksize >> > (&dev_y[0][blocksize * i], dev_a, &dev_u[0][blocksize * i], dev_k);
+
+			convolKernel << < 1, blocksize >> > (&dev_y[0][0], &dev_u[0][0], dev_k, 12100);
 			// Check for any errors launching the kernel
 			cudaStatus = cudaGetLastError();
 			if (cudaStatus != cudaSuccess) {
@@ -129,7 +135,7 @@ cudaError_t addWithCuda() // short int* c, const short int* a, const short int* 
 					cudaGetErrorString(cudaStatus));
 				goto Error;
 			}
-			convolKernel << < 1, blocksize >> > (&dev_y[1][blocksize * i], dev_a, &dev_u[1][blocksize * i], dev_k);
+			convolKernel << < 1, blocksize >> > (&dev_y[1][0], &dev_u[1][0], dev_k, 12100);
 			// Check for any errors launching the kernel
 			cudaStatus = cudaGetLastError();
 			if (cudaStatus != cudaSuccess) {
@@ -137,7 +143,6 @@ cudaError_t addWithCuda() // short int* c, const short int* a, const short int* 
 					cudaGetErrorString(cudaStatus));
 				goto Error;
 			}
-		}
 	}
 
 	// cudaDeviceSynchronize waits for the kernel to finish, and returns
@@ -164,9 +169,13 @@ cudaError_t addWithCuda() // short int* c, const short int* a, const short int* 
 		goto Error;
 	}
 
-Error: cudaFree(dev_y);
-	cudaFree(dev_u);
+Error: 
+	cudaFree(dev_y[0]);
+	cudaFree(dev_y[1]);
+	cudaFree(dev_u[0]);
+	cudaFree(dev_u[1]);
 	cudaFree(dev_k);
+	cudaFree(dev_a);
 
 	return cudaStatus;
 }

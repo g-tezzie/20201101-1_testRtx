@@ -13,7 +13,7 @@
 
 class Fir {
 public:
-	static const int depth = 14;
+	static const int depth = 12;
 
 private:
 	static const int taps = (1 << depth);
