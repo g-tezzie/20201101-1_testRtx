@@ -1,7 +1,7 @@
 /*
-* 
+*
 * from: https://docs.nvidia.com/nsight-compute/ReleaseNotes/index.html
-* 
+*
  *Enabling certain metrics can cause GPU kernels to run longer than the driver's watchdog time-out limit. In these cases the driver will terminate the GPU kernel resulting in an application error and profiling data will not be available. Please disable the driver watchdog time out before profiling such long running CUDA kernels.
 On Linux, setting the X Config option Interactive to false is recommended.
 For Windows, detailed information on disabling the Windows TDR is available at https://docs.microsoft.com/en-us/windows-hardware/drivers/display/timeout-detection-and-recovery
@@ -11,45 +11,56 @@ For Windows, detailed information on disabling the Windows TDR is available at h
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 
+#include "math_constants.h"
+ //#include "math.h"
+
 #include <stdio.h>
 #include <iostream>
 
 #include "fir.h"
 
-// shmem
+ // shmem
 static const int buflen = 100e6;
 extern char ioRaw[buflen];
 extern short int raw[2][buflen / 4];
 extern short int rawo[2][buflen / 4];
 extern Fir lFir;
 
-__global__ void addKernel(short int* c, const short int* a,
-	const short int* b) {
-	int i = threadIdx.x;
-	c[i] = a[i] + b[i];
-}
 
 const int blocksize = 1024;
 static const int depth = Fir::depth;
 static const int taps = 1 << depth;
 
+__device__ float core_sinc(int i) {
+
+	static const float fl_ = 200.0 / 48000.0;
+	const float pi = CUDART_PI; // atan2(-1, 0);
+	float wl = fl_ * 2 * pi;
+	float no2 = (taps - 1) / 2.0;
+
+	float no2Now = -no2 + i;
+	float xn = sin(wl * no2Now);
+	float xd = pi * no2Now;
+	float invd = 1.0 / xd;
+	float xx = xn * invd;	// ‚±‚¤‚È‚ç‚È‚¢‚æ‚¤‚É•ÛØ no2Now == 0 ? 2 * fl : xn / xd;
+	return xx;
+}
+
 __global__ void convolKernel(short int* y, const short int u[], const long long k[], const int repeat) {
 	int j = threadIdx.x;
-	long long aa[blocksize];
-//	__shared__ long long kk[taps];
+	float aa[blocksize];
+	//	__shared__ long long kk[taps];
 
-//	memcpy(kk, k, taps * sizeof(kk[0]));
-	
+	//	memcpy(kk, k, taps * sizeof(kk[0]));
+
 	for (int ii = 0; ii < repeat; ii++) {
 		aa[j] = 0;
-#pragma unroll taps
-		for (int i = 0; i < taps; i++) {
-			aa[j] += (0 //
-				+ u[ii * blocksize + j + i + 0] * k[i + 0] //
-				);
+#pragma unroll taps/2
+		for (int i = 0; i < taps / 2; i++) {
+			aa[j] += (u[ii * blocksize + j + i + 0] + u[ii * blocksize + j + taps - i - 1]) * core_sinc(i);
 		}
 
-		y[ii * blocksize + j] = aa[j] >> 64 - 16;
+		y[ii * blocksize + j] = aa[j];
 	}
 }
 
@@ -137,33 +148,33 @@ cudaError_t addWithCuda() // short int* c, const short int* a, const short int* 
 	{	// Launch a kernel on the GPU with one thread for each element.
 	//addKernel << < 1, size >> > (dev_c, dev_a, dev_b);
 
-			convolKernel << < 1, blocksize >> > (&dev_y[0][0], &dev_u[0][0], dev_k, 12100);
-			// Check for any errors launching the kernel
-			cudaStatus = cudaGetLastError();
-			if (cudaStatus != cudaSuccess) {
-				fprintf(stderr, "addKernel launch failed: %s\n",
-					cudaGetErrorString(cudaStatus));
-				goto Error;
-			}
-			
-			// cudaDeviceSynchronize waits for the kernel to finish, and returns
-		// any errors encountered during the launch.
-			cudaStatus = cudaDeviceSynchronize();
-			if (cudaStatus != cudaSuccess) {
-				fprintf(stderr,
-					"cudaDeviceSynchronize returned error code %d after launching addKernel!\n",
-					cudaStatus);
-				goto Error;
-			}
-			
-			convolKernel << < 1, blocksize >> > (&dev_y[1][0], &dev_u[1][0], dev_k, 12100);
-			// Check for any errors launching the kernel
-			cudaStatus = cudaGetLastError();
-			if (cudaStatus != cudaSuccess) {
-				fprintf(stderr, "addKernel launch failed: %s\n",
-					cudaGetErrorString(cudaStatus));
-				goto Error;
-			}
+		convolKernel << < 1, blocksize >> > (&dev_y[0][0], &dev_u[0][0], dev_k, 12100);
+		// Check for any errors launching the kernel
+		cudaStatus = cudaGetLastError();
+		if (cudaStatus != cudaSuccess) {
+			fprintf(stderr, "addKernel launch failed: %s\n",
+				cudaGetErrorString(cudaStatus));
+			goto Error;
+		}
+
+		// cudaDeviceSynchronize waits for the kernel to finish, and returns
+	// any errors encountered during the launch.
+		cudaStatus = cudaDeviceSynchronize();
+		if (cudaStatus != cudaSuccess) {
+			fprintf(stderr,
+				"cudaDeviceSynchronize returned error code %d after launching addKernel!\n",
+				cudaStatus);
+			goto Error;
+		}
+
+		convolKernel << < 1, blocksize >> > (&dev_y[1][0], &dev_u[1][0], dev_k, 12100);
+		// Check for any errors launching the kernel
+		cudaStatus = cudaGetLastError();
+		if (cudaStatus != cudaSuccess) {
+			fprintf(stderr, "addKernel launch failed: %s\n",
+				cudaGetErrorString(cudaStatus));
+			goto Error;
+		}
 	}
 
 	// cudaDeviceSynchronize waits for the kernel to finish, and returns
@@ -190,7 +201,7 @@ cudaError_t addWithCuda() // short int* c, const short int* a, const short int* 
 		goto Error;
 	}
 
-Error: 
+Error:
 	cudaFree(dev_y[0]);
 	cudaFree(dev_y[1]);
 	cudaFree(dev_u[0]);

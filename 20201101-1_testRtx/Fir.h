@@ -13,7 +13,7 @@
 
 class Fir {
 public:
-	static const int depth = 12;
+	static const int depth = 13;
 
 private:
 	static const int taps = (1 << depth);
@@ -22,6 +22,7 @@ private:
 	int ptr = 0;
 
 	void triangular();
+	void NewFunction(double no2, int i, double wl, double pi, double fl);
 	void sinc();
 	void clear();
 
@@ -61,6 +62,15 @@ inline void Fir::triangular() {
 }
 
 
+inline void Fir::NewFunction(double no2, int i, double wl, double pi, double fl)
+{
+	double no2Now = -no2 + i;
+	double xn = sin(wl * no2Now);
+	double xd = pi * no2Now;
+	double xx = no2Now == 0 ? 2 * fl : xn / xd;
+	k[i] = xx * (1LL << (64 - 16));
+}
+
 inline void Fir::sinc() {
 
 //	function [x]=filt_sinc(n,fl)
@@ -80,11 +90,7 @@ inline void Fir::sinc() {
 	double wl = fl * 2 * pi;
 
 	for (int i = 0; i < taps; i++) {
-		double no2Now = -no2 + i;
-		double xn = sin(wl * no2Now);
-		double xd = pi * no2Now;
-		double xx = no2Now == 0 ? 2 * fl : xn / xd;
-		k[i] = xx * (1LL << (64 - 16));
+		NewFunction(no2, i, wl, pi, fl);
 
 //		std::cerr << i << ": " << xx << std::endl;
 	}
