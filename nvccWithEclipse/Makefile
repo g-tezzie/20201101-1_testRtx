@@ -62,7 +62,7 @@ MSCCIFLAGS := \
 
 
 #/JMC /GS /Qpar /W3 /Zc:wchar_t /I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.1\include" /ZI /Gm- /O2 /Fd"x64\Debug\vc142.pdb" /Zc:inline /fp:fast /D "WIN32" /D "WIN64" /D "_DEBUG" /D "_CONSOLE" /D "_MBCS" /errorReport:prompt /WX- /Zc:forScope /Gd /MDd /FC /Fa"x64\Debug\" /EHsc /nologo /Fo"x64\Debug\" /Ot /Fp"x64\Debug\20201101-1_testRtx.pch" /diagnostics:column 
-MSCCFLAGS_OPT := # -Qpar  -Qpar-report:2
+MSCCFLAGS_OPT := -Qpar -Qpar-report:2 -fp:fast -Ot -O2
 MSCCFLAGS := -Gd -EHsc -W3 -nologo -Ox -Fdvc142.pdb -FS -Zi -MDd $(MSCCFLAGS_OPT) $(MSCCIFLAGS)
 
 
@@ -109,7 +109,7 @@ endif
 
 .PRECIOUS: %.o %.cu.o
 
-all:	$(PROJECT_NAME).exe
+all: $(PROJECT_NAME).exe ../../Makefile
 
 CPP_SOURCES = $(wildcard $(PROJECT_ROOT)*.cpp)
 CU_SOURCES = $(wildcard $(PROJECT_ROOT)*.cu)
@@ -135,5 +135,5 @@ $(PROJECT_NAME).exe: $(OBJS)
 #%.o:	$(PROJECT_ROOT)%.c
 #	$(CC) -c $(CFLAGS) $(CPPFLAGS) -o $@ $<
 
-#clean:
-#	rm -fr nvccWithMake $(OBJS)
+clean:
+	rm -fr $(OBJS)

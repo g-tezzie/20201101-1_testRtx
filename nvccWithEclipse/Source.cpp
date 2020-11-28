@@ -23,9 +23,6 @@ short int rawo[2][buflen / 4];
 Fir lFir = Fir();
 Fir rFir = Fir();
 
-
-int __cdecl  maine();
-
 int main() {
 	time_t start = time(nullptr);
 
@@ -51,6 +48,7 @@ int main() {
 
 
 	{
+		extern int maine();
 		if (0 != maine()) return 1;
 
 		for (int i = 0; i < (samples >> 2); i++) {

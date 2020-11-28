@@ -25,7 +25,7 @@ extern short int raw[2][buflen / 4];
 extern short int rawo[2][buflen / 4];
 extern Fir lFir;
 
-const int blocksize = 1024;
+const int blocksize = 128;
 static const int depth = Fir::depth;
 static const int taps = 1 << depth;
 
@@ -54,7 +54,7 @@ __global__ void convolKernel(short int *y, const short int u[],
 
 	for (int ii = 0; ii < repeat; ii++) {
 		aa[j] = 0;
-#pragma unroll taps/2
+#pragma unroll 512
 		for (int i = 0; i < taps / 2; i++) {
 			aa[j] += (u[ii * blocksize + j + i + 0]
 					+ u[ii * blocksize + j + taps - i - 1]) * core_sinc(i);
