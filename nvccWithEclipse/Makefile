@@ -26,6 +26,7 @@
 # /LIBPATH:"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.1\lib\x64" /TLBID:1 
 
 PROJECT_ROOT = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+PROJECT_NAME = $(subst $(abspath $(PROJECT_ROOT)..)/,,$(abspath $(PROJECT_ROOT)))
 
 OBJS = nvccWithMake.o
 
@@ -36,7 +37,15 @@ NVCC = "$(CUDA_PATH)/bin/nvcc"
 NVCCFLAGS = -ccbin "$(VCPATH)" -x cu -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.1\include" --source-in-ptx --keep -maxrregcount=0 --ptxas-options=-v --machine 64 --compile    -DWIN32 -DWIN64 -D_DEBUG -D_CONSOLE -D_MBCS -Xcompiler " /EHsc /W3 /nologo /Ox  /FS /Zi  /MDd " $(NVARCH) 
 NVARCH = -g  -use_fast_math -gencode=arch=compute_75,code=\"sm_75,compute_75\"
 #NVLDFLAGS = $(NVARCH) --library-path="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.1\lib\x64" --library=cudart_static --library=cudart --library=cudadevrt
-NVLDFLAGS = --linker-options '/LIBPATH:"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.1\lib\x64" /DYNAMICBASE "cudart_static.lib" "kernel32.lib" "user32.lib" "gdi32.lib" "winspool.lib" "comdlg32.lib" "advapi32.lib" "shell32.lib" "ole32.lib" "oleaut32.lib" "uuid.lib" "odbc32.lib" "odbccp32.lib" "cudart.lib" "cudadevrt.lib" "msvcrt.lib"'
+#NVLDFLAGS = --linker-options '/LIBPATH:"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.1\lib\x64" /DYNAMICBASE "cudart_static.lib" "kernel32.lib" "user32.lib" "gdi32.lib" "winspool.lib" "comdlg32.lib" "advapi32.lib" "shell32.lib" "ole32.lib" "oleaut32.lib" "uuid.lib" "odbc32.lib" "odbccp32.lib" "cudart.lib" "cudadevrt.lib" "msvcrt.lib"'
+
+LDFLAGS = -lgomp -lstdc++ \
+	"$(CUDA_PATH)/lib/x64/cudart_static.lib" \
+	"$(CUDA_PATH)/lib/x64/cudart.lib" \
+	"$(CUDA_PATH)/lib/x64/cudadevrt.lib"
+
+
+CFLAGS = -O3 -Ofast -march=native -mtune=native -mfpmath=sse -ffast-math -fopenmp -g3 -Wall -c -fmessage-length=0 
 
 VSPATH = C:\Program Files (x86)\Microsoft Visual Studio\2019\Community
 VCPATH = $(VSPATH)\VC\Tools\MSVC\14.27.29110\bin\HostX86\x64
@@ -55,23 +64,31 @@ else
     $(error Build mode $(BUILD_MODE) not supported by this Makefile)
 endif
 
-.PRECIOUS: %.o
+.PRECIOUS: %.o %.cu.o
 
-all:	kernel.exe
+all:	$(PROJECT_NAME).exe
 
+CPP_SOURCES = $(wildcard $(PROJECT_ROOT)*.cpp)
+CU_SOURCES = $(wildcard $(PROJECT_ROOT)*.cu)
+
+OBJS = $(subst $(PROJECT_ROOT),,$(CPP_SOURCES:.cpp=.o) $(CU_SOURCES:.cu=.cu.o))
+
+#%.exe: %.cu.o
 #nvccWithMake:	$(OBJS)
-#	$(CXX) $(LDFLAGS) -o $@ $^
+$(PROJECT_NAME).exe: $(OBJS)
+	$(CXX) $(LDFLAGS) -o $@ $^
+#	$(NVCC) $(NVLDFLAGS) -o $@ $^
+#	echo $(OBJS)
+#	echo $@
+
 
 %.cu.o: $(PROJECT_ROOT)%.cu
 #	$(NVCC) -c $(CFLAGS) $(CXXFLAGS) $(CPPFLAGS) -o $@ $<
 	$(NVCC) $(NVCCFLAGS) -o $@ $<
 
-%.exe: %.cu.o
-	$(NVCC) $(NVLDFLAGS) -o $@ $^
+%.o:	$(PROJECT_ROOT)%.cpp
+	$(CXX) -c $(CFLAGS) $(CXXFLAGS) $(CPPFLAGS) -o $@ $<
 
-#%.o:	$(PROJECT_ROOT)%.cpp
-#	$(CXX) -c $(CFLAGS) $(CXXFLAGS) $(CPPFLAGS) -o $@ $<
-#
 #%.o:	$(PROJECT_ROOT)%.c
 #	$(CC) -c $(CFLAGS) $(CPPFLAGS) -o $@ $<
 
